@@ -1,0 +1,12 @@
+@startuml
+scale 550 width
+
+state Philosofer1 {
+  [*] --> Thinking
+  Thinking --> Thinking : Grabs 1st fork
+  Thinking ----> Eating : Grabs 2nd fork
+  Eating -----> Thinking : Drops a fork
+  Thinking --> Thinking : Drops other fork
+}
+
+@enduml
