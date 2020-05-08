@@ -1,4 +1,4 @@
-project(problem_with_mutex_bad C)
+project(problem_with_sempahore_bad C)
 
 find_package(Threads REQUIRED)
 #find_package(Curses REQUIRED)
