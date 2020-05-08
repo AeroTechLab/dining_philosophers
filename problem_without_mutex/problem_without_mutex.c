@@ -6,8 +6,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#include "colors.h"
-#include <curses.h>
 #include <math.h>
 
 #define N_PHILOSOFERS 12
