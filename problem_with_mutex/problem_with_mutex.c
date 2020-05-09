@@ -36,6 +36,8 @@ pthread_t thread_id[N_PHILOSOFERS];
 char eventLog[N_PHILOSOFERS][N_TIMELOG][MAX_WHAT_LENGTH];
 long int timeLog[N_PHILOSOFERS][N_TIMELOG];
 
+struct timeval thikingStart[N_PHILOSOFERS];
+
 void intHandler(int dummy) {
     keepRunning = 0;
 }
@@ -77,6 +79,12 @@ void* philosopher(void* philosopherID)
     int eventLogIndex = 0;
     int internalKeepRunning = 1;
     
+    gettimeofday(&(thikingStart[myPhilosoferID]), NULL);
+    
+    sprintf(what, "p%d thinking", myPhilosoferID);
+    internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+    if(!internalKeepRunning) pthread_exit(0);
+    
     while (keepRunning && internalKeepRunning) {
     
         sprintf(what, "p%d try L f%d", myPhilosoferID, myLeftForkID);
@@ -85,6 +93,14 @@ void* philosopher(void* philosopherID)
         
         do
         {
+            gettimeofday(&currentTime, NULL);
+            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > 3000000)
+            {
+                sprintf(what, "p%d dead", myPhilosoferID);
+                internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+                keepRunning = 0;
+                pthread_exit(0);
+            }
         } while( pthread_mutex_trylock(&(forkMtx[myLeftForkID])) != 0);
 
         forks[myLeftForkID] = myPhilosoferID;
@@ -108,7 +124,17 @@ void* philosopher(void* philosopherID)
         }
         do
         {
-        } while( pthread_mutex_lock(&(forkMtx[myRightForkID])) != 0);
+            gettimeofday(&currentTime, NULL);
+            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > 3000000)
+            {
+                sprintf(what, "p%d dead", myPhilosoferID);
+                internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+                keepRunning = 0;
+                forks[myLeftForkID] = TABLE;
+                pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
+                pthread_exit(0);
+            }
+        } while( pthread_mutex_trylock(&(forkMtx[myRightForkID])) != 0);
 
         forks[myRightForkID] = myPhilosoferID;
         
@@ -130,9 +156,9 @@ void* philosopher(void* philosopherID)
         if(!internalKeepRunning)
         {
             //TODO: print imout on file
-            forks[myRightForkID] = -1;
+            forks[myRightForkID] = TABLE;
             pthread_mutex_unlock(&(forkMtx[myRightForkID]));
-            forks[myLeftForkID] = -1;
+            forks[myLeftForkID] = TABLE;
             pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
             pthread_exit(0);
         }
@@ -145,14 +171,14 @@ void* philosopher(void* philosopherID)
 //        update = myPhilosoferID;
         if(!internalKeepRunning)
         {
-            forks[myRightForkID] = -1;
+            forks[myRightForkID] = TABLE;
             pthread_mutex_unlock(&(forkMtx[myRightForkID]));
-            forks[myLeftForkID] = -1;
+            forks[myLeftForkID] = TABLE;
             pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
             pthread_exit(0);
         }
 
-        forks[myLeftForkID] = -1;
+        forks[myLeftForkID] = TABLE;
         pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
         
         sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
@@ -160,12 +186,12 @@ void* philosopher(void* philosopherID)
 //        update = myPhilosoferID;
         if(!internalKeepRunning)
         {
-            forks[myRightForkID] = -1;
+            forks[myRightForkID] = TABLE;
             pthread_mutex_unlock(&(forkMtx[myRightForkID]));
             pthread_exit(0);
         }
 
-        forks[myRightForkID] = -1;
+        forks[myRightForkID] = TABLE;
         pthread_mutex_unlock(&(forkMtx[myRightForkID]));
         
         sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
@@ -173,7 +199,7 @@ void* philosopher(void* philosopherID)
 //        update = myPhilosoferID;
         if(!internalKeepRunning) pthread_exit(0);
         
-        usleep(300000);
+        //usleep(300000);
     }
 }
 
@@ -188,7 +214,7 @@ int main()
     pthread_t thread_updater;
     
     for (i = 0; i < N_PHILOSOFERS; i++) {
-        forks[i] = -1;
+        forks[i] = TABLE;
         phil[i] = i;
         pthread_mutex_init(&(forkMtx[i]),NULL);
     }
