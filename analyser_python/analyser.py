@@ -5,7 +5,7 @@ file_pre_name = 'logPhil'
 
 n_philosofers = 9
 n_forks = n_philosofers
-n_lines = 9500
+n_lines = 9900
 
 file_indexes = [i for i in range(n_philosofers)]
 
@@ -114,15 +114,21 @@ while not np.sum(live_phil_logs_idx) == 0:
 
 header = ' '*20 + ' '*15* n_philosofers + '|' + ''.join(['{:>6}'.format('f'+str(fork_idx)) for fork_idx in range(n_forks)])
 
+final_log_text = []
+
+final_log_text.append(header + '\n')
+for t,l,fo in zip(final_times, final_logs, forks_owner):
+    final_log_text.append('{:20}'.format(str(t)))
+    for e in l:
+        final_log_text[-1] = final_log_text[-1] + '{:>15}'.format(e)
+
+    final_log_text[-1] = final_log_text[-1] + '|'
+    for o in fo:
+        final_log_text[-1] = final_log_text[-1] + '{:>6}'.format('' if o == [] else o)
+
 with open('final_log.txt','w') as f_final_logs:
-    f_final_logs.write(header + '\n')
-    for t,l,fo in zip(final_times, final_logs, forks_owner):
-        f_final_logs.write('{:20}'.format(str(t)))
-        for e in l:
-            f_final_logs.write('{:>15}'.format(e))
+    f_final_logs.write(final_log_text[0] + '\n')
 
-        f_final_logs.write('|')
-        for o in fo:
-            f_final_logs.write('{:>6}'.format('' if o == [] else o))
-
-        f_final_logs.write('\n')
+    for i in range(1, len(final_log_text)):
+        if not final_log_text[i][20:] == final_log_text[i-1][20:]:
+            f_final_logs.write(final_log_text[i] + '\n')
