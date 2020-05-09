@@ -12,14 +12,14 @@
 #define TABLE -1
 
 #ifndef N_PHILOSOFERS
-    #define N_PHILOSOFERS 5
+    #define N_PHILOSOFERS 9
 #endif
 #define N_FORKS N_PHILOSOFERS
 
 #define LEFT_FORK(philosoferID) philosoferID
 #define RIGHT_FORK(philosoferID) ((philosoferID+1) % N_PHILOSOFERS)
 
-#define N_TIMELOG 100
+#define N_TIMELOG 10000
 #define MAX_WHAT_LENGTH 100
 
 int state[N_PHILOSOFERS];
@@ -38,15 +38,17 @@ long int timeLog[N_PHILOSOFERS][N_TIMELOG];
 
 void intHandler(int dummy) {
     keepRunning = 0;
-    for (int i = 0; i < N_PHILOSOFERS; ++i)
+    /*for (int i = 0; i < N_PHILOSOFERS; ++i)
     {
         pthread_cancel(thread_id[i]);
-    }
+    }*/
 }
 
-int saveToLog(int *eventLogIndex, char* what, struct timeval* currentTime, int myID)
+int saveToLog(int *eventLogIndex, char* what, struct timeval* currentTime, int philosoferID)
 {
     int stop = 0;
+    
+    //printf("p%d ev idx %d\n", philosoferID, *eventLogIndex);
     
     if (*eventLogIndex >= N_TIMELOG)
     {
@@ -55,8 +57,8 @@ int saveToLog(int *eventLogIndex, char* what, struct timeval* currentTime, int m
     else
     {
         gettimeofday(currentTime, NULL);
-        timeLog[myID][*eventLogIndex] = 1000000*currentTime->tv_sec+currentTime->tv_usec;
-        sprintf(eventLog[myID][*eventLogIndex], "%10ld %s", timeLog[myID][*eventLogIndex], what);
+        timeLog[philosoferID][*eventLogIndex] = 1000000 * currentTime->tv_sec + currentTime->tv_usec;
+        sprintf(eventLog[philosoferID][*eventLogIndex], "%10ld %s", timeLog[philosoferID][*eventLogIndex], what);
         *eventLogIndex = *eventLogIndex + 1;
         
         stop = 0;
@@ -84,11 +86,12 @@ void* philosopher(void* philosopherID)
     while (keepRunning && internalKeepRunning) {
     
         //TRY LEFT FORK
-        sprintf(what, "p%d try L f%d", myPhilosoferID, myLeftForkID);
-        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
-        if(!internalKeepRunning) pthread_exit(0);
         
-        while(forks[myLeftForkID] != TABLE ){}
+        do{
+            sprintf(what, "p%d try L f%d", myPhilosoferID, myLeftForkID);
+            internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+            if(!internalKeepRunning) pthread_exit(0);
+        }while(forks[myLeftForkID] != TABLE );
         
         //GOT LEFT FORK
         forks[myLeftForkID] = myPhilosoferID;
@@ -103,14 +106,16 @@ void* philosopher(void* philosopherID)
         }
         
         //TRY RIGHT FORK
-        sprintf(what, "p%d try R f%d", myPhilosoferID, myRightForkID);
-        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
-        if(!internalKeepRunning)
-        {
-            forks[myLeftForkID] = TABLE;
-            pthread_exit(0);
-        }
-        while( forks[myRightForkID] != TABLE){}
+        do{
+    
+            sprintf(what, "p%d try R f%d", myPhilosoferID, myRightForkID);
+            internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+            if(!internalKeepRunning)
+            {
+                forks[myLeftForkID] = TABLE;
+                pthread_exit(0);
+            }
+        }while( forks[myRightForkID] != TABLE);
         
         //GOT RIGHT FORK
         forks[myRightForkID] = myPhilosoferID;
@@ -138,8 +143,8 @@ void* philosopher(void* philosopherID)
             pthread_exit(0);
         }
         
-        //EATS FOR 2 SECONDS
-        usleep(2000000);
+        //EATING TIME
+        usleep(1000000);
         
         //STOPING EATING, STARTS THINKING
         philStatus[myPhilosoferID] = THINKING;
@@ -154,9 +159,9 @@ void* philosopher(void* philosopherID)
         }
         
         //DROPPING LEFT FORK
+        sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
         forks[myLeftForkID] = TABLE;
         
-        sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
         internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
         
         if(!internalKeepRunning)
@@ -166,15 +171,15 @@ void* philosopher(void* philosopherID)
         }
         
         //DROPPING RIGHT FORK
+        sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
         forks[myRightForkID] = TABLE;
         
-        sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
         internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
         
         if(!internalKeepRunning) pthread_exit(0);
         
-        //THINKING FOR 3 SECONDS
-        usleep(300000);
+        //THINKING TIME
+        usleep(1500000);
     }
 }
 
