@@ -1,343 +1,238 @@
-#include <pthread.h>
-#include <semaphore.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <stdnoreturn.h>
 #include <string.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <math.h>
 
-#define N_PHILOSOFERS 12
-#define N_FORKS N_PHILOSOFERS
+#include <pthread.h>
+#include <sys/time.h>
+#include <signal.h>
+
 #define EATING 1
 #define THINKING 0
-#define LEFT_FORK(philosoferID) ((philosoferID + N_PHILOSOFERS-1) % N_PHILOSOFERS)
-#define RIGHT_FORK(philosoferID) ((philosoferID) % N_PHILOSOFERS)
+#define TABLE -1
+
+#ifndef N_PHILOSOFERS
+    #define N_PHILOSOFERS 5
+#endif
+#define N_FORKS N_PHILOSOFERS
+
+#define LEFT_FORK(philosoferID) philosoferID
+#define RIGHT_FORK(philosoferID) ((philosoferID+1) % N_PHILOSOFERS)
 
 #define N_TIMELOG 100
+#define MAX_WHAT_LENGTH 100
 
 int state[N_PHILOSOFERS];
 int phil[N_PHILOSOFERS];
 int philStatus[N_PHILOSOFERS];
 int forks[N_FORKS];
 
-pthread_mutex_t mtx_timeLog;
+pthread_mutex_t forkMtx[N_FORKS];
 
-float timeStamp[N_TIMELOG];
-char what[N_TIMELOG][30];
-int id[N_TIMELOG];
-int update = 0;
-int nPhilEating = 0;
-int nPhilThinking = 0;
+static volatile int keepRunning = 1;
 
+pthread_t thread_id[N_PHILOSOFERS];
 
-int imout = 0;
+char eventLog[N_PHILOSOFERS][N_TIMELOG][MAX_WHAT_LENGTH];
+long int timeLog[N_PHILOSOFERS][N_TIMELOG];
 
-typedef struct coord_
-{
-    int x;
-    int y;
-} coord;
-
-typedef struct philCoord_
-{
-    coord status;
-    coord forkL;
-    coord forkR;
-} philCoord;
-
-coord forkCoords[N_FORKS];
-philCoord philCoords[N_PHILOSOFERS];
-
-typedef unsigned long long u64;
-
-u64 u64useconds;
-struct timeval beginingOfThinkingTimes[N_PHILOSOFERS];
-
-//void markTime(char* what)
-//{
-//    pthread_mutex_lock(&mtx_timeLog);
-//        gettimeofday(&tv,NULL);
-//        u64useconds = (1000000*tv.tv_sec) + tv.tv_usec;
-//    pthread_mutex_unlock(&mtx_timeLog);
-//}
-//
-//void printForks()
-//{
-//    printf("\t | ");
-//    for(int i = 0; i < N_FORKS; ++i)
-//    {
-//        printf("  %4s [%2d]", "fork", i);
-//    }
-//
-//    printf("\n\t | ");
-//
-//    for(int i = 0; i < N_FORKS; ++i)
-//    {
-//        if(forks[i] == -1)
-//            printf("  %8s", "none");
-//        else
-//            printf("  %8d", forks[i]);
-//    }
-//
-//    printf("\n");
-//}
-//
-//void printPhilosofers()
-//{
-//    printf("\t | ");
-//    for(int i = 0; i < N_PHILOSOFERS; ++i)
-//    {
-//        printf("  %4s [%2d]", "phil", i);
-//    }
-//
-//    printf("\n\t | ");
-//
-//    for(int i = 0; i < N_PHILOSOFERS; ++i)
-//    {
-//        printf("  %s", philStatus[i] == THINKING ? BLUE("thinking") : RED("  eating"));
-//    }
-//
-//    printf("\n");
-//}
-
-// take up chopsticks
-int takeFork(int philosoferID, int forkID)
-{
-    int youGotTheFork = 0;
-    
-    if (forks[forkID] == -1 || forks[forkID] == philosoferID)
+void intHandler(int dummy) {
+    keepRunning = 0;
+    for (int i = 0; i < N_PHILOSOFERS; ++i)
     {
-        forks[forkID] = philosoferID;
-        youGotTheFork = 1;
+        pthread_cancel(thread_id[i]);
+    }
+}
+
+int saveToLog(int *eventLogIndex, char* what, struct timeval* currentTime, int myID)
+{
+    int stop = 0;
+    
+    if (*eventLogIndex >= N_TIMELOG)
+    {
+        stop = 1;
+    }
+    else
+    {
+        gettimeofday(currentTime, NULL);
+        timeLog[myID][*eventLogIndex] = 1000000*currentTime->tv_sec+currentTime->tv_usec;
+        sprintf(eventLog[myID][*eventLogIndex], "%10ld %s", timeLog[myID][*eventLogIndex], what);
+        *eventLogIndex = *eventLogIndex + 1;
+        
+        stop = 0;
     }
     
-    return youGotTheFork;
+    return stop;
 }
 
-int putFork(int forkID)
+void* philosopher(void* philosopherID)
 {
-    forks[forkID] = -1;
-    return 0;
-}
-
-void* philospher(void* num)
-{
-    int gotLeftFork = 0;
-    int gotRightFork = 0;
-    
-    int myPhilosoferID = *((int*)num);
+    int myPhilosoferID = *((int*) philosopherID);
     int myLeftForkID = LEFT_FORK(myPhilosoferID);
     int myRightForkID = RIGHT_FORK(myPhilosoferID);
     
+    char what[MAX_WHAT_LENGTH];
     struct timeval currentTime;
     
     philStatus[myPhilosoferID] = THINKING;
-    nPhilThinking++;
     
-    long int triesCount = 0;
+    usleep(1000000);
     
-    int i=0;
+    int eventLogIndex = 0;
+    int internalKeepRunning = 1;
     
-    sleep(1);
+    while (keepRunning && internalKeepRunning) {
     
-    gettimeofday(&(beginingOfThinkingTimes[myPhilosoferID]), NULL);
-    
-    while (1) {
+        //TRY LEFT FORK
+        sprintf(what, "p%d try L f%d", myPhilosoferID, myLeftForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        if(!internalKeepRunning) pthread_exit(0);
         
-        do
+        while(forks[myLeftForkID] != TABLE ){}
+        
+        //GOT LEFT FORK
+        forks[myLeftForkID] = myPhilosoferID;
+        
+        sprintf(what, "p%d got L f%d", myPhilosoferID, myLeftForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        
+        if(!internalKeepRunning)
         {
-
-            gotLeftFork = takeFork(myPhilosoferID, myLeftForkID);
-            
-            gotRightFork = takeFork(myPhilosoferID, myRightForkID);
-            
-            gettimeofday(&currentTime, NULL);
-            
-//            if(1000000*(currentTime.tv_sec - beginingOfThinkingTimes[myPhilosoferID].tv_sec) - beginingOfThssssinkingTimes[myPhilosoferID].tv_usec > 10000000)
-//            {
-//                imout++;
-//                pthread_exit(0);
-//            }
-            
-        } while (!(gotLeftFork && gotRightFork));
+            forks[myLeftForkID] = TABLE;
+            pthread_exit(0);
+        }
         
+        //TRY RIGHT FORK
+        sprintf(what, "p%d try R f%d", myPhilosoferID, myRightForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        if(!internalKeepRunning)
+        {
+            forks[myLeftForkID] = TABLE;
+            pthread_exit(0);
+        }
+        while( forks[myRightForkID] != TABLE){}
+        
+        //GOT RIGHT FORK
+        forks[myRightForkID] = myPhilosoferID;
+        
+        sprintf(what, "p%d got R f%d", myPhilosoferID, myRightForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        
+        if(!internalKeepRunning)
+        {
+            forks[myRightForkID] = TABLE;
+            forks[myLeftForkID] = TABLE;
+            pthread_exit(0);
+        }
+        
+        //STARTS EATING
         philStatus[myPhilosoferID] = EATING;
-        nPhilEating++;
-        nPhilThinking--;
         
-        update = myPhilosoferID;
+        sprintf(what, "p%d eating", myPhilosoferID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        if(!internalKeepRunning)
+        {
+            //TODO: print imout on file
+            forks[myRightForkID] = TABLE;
+            forks[myLeftForkID] = TABLE;
+            pthread_exit(0);
+        }
         
-        sleep(2);
-    
-        gotLeftFork = putFork(RIGHT_FORK(myLeftForkID));
+        //EATS FOR 2 SECONDS
+        usleep(2000000);
         
-        
-        gotRightFork = putFork(LEFT_FORK(myRightForkID));
-        
-        gettimeofday(&(beginingOfThinkingTimes[myPhilosoferID]), NULL);
+        //STOPING EATING, STARTS THINKING
         philStatus[myPhilosoferID] = THINKING;
-        nPhilThinking++;
-        nPhilEating--;
-        update = myPhilosoferID;
-    }
-}
-
-#define C_FORK_TABLE      1
-#define C_FORK_NOT_TABLE  2
-#define C_EATING          3
-#define C_THINKING        4
-
-void* printUpdate(void* unused)
-{
-    initscr();			/* Start curses mode 		*/
-    raw();				/* Line buffering disabled	*/
-    struct timeval currentTime;
-    
-    if (has_colors() == FALSE) {
-        endwin();
-        printf("Your terminal does not support color\n");
-        exit(1);
-    }
-    
-    start_color();
-    
-    int i = 0;
-    
-    for (i = 0; i < N_PHILOSOFERS; ++i)
-    {
-        philCoords[i].status.y = 1;
-        philCoords[i].status.x = 10 * i + 2;
+        sprintf(what, "p%d thinking", myPhilosoferID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
         
-        philCoords[i].forkL.y = 2;
-        philCoords[i].forkL.x = philCoords[i].status.x;
-        
-        philCoords[i].forkL.y = 3;
-        philCoords[i].forkL.x = philCoords[i].status.x;
-        
-    }
-    
-    for (i = 0; i < N_FORKS; ++i)
-    {
-        forkCoords[i].x = i * 5 + 12;
-        forkCoords[i].y = 4;
-    }
-    
-    init_pair(C_FORK_TABLE, COLOR_BLUE, COLOR_BLACK);
-    init_pair(C_FORK_NOT_TABLE, COLOR_RED, COLOR_BLACK);
-    init_pair(C_EATING, COLOR_GREEN, COLOR_BLACK);
-    init_pair(C_THINKING, COLOR_CYAN, COLOR_BLACK);
-    
-    for (int i = 0; i < N_PHILOSOFERS; ++i)
-    {
-        mvprintw(0, philCoords[i].status.x, "  phil %2d  ", i);
-    }
-    
-    mvprintw(4,0,"on table: ");
-    for(i = 0; i<N_FORKS; ++i)
-    {
-        attron(COLOR_PAIR(C_FORK_TABLE));
-        mvprintw(forkCoords[i].y, forkCoords[i].x, "f%2d", i);
-        attroff(COLOR_PAIR(C_FORK_TABLE));
-    }
-    
-    refresh();			/* Print it on to the real screen */
-    
-    while(1)
-    {
-        if(update != -1)
+        if(!internalKeepRunning)
         {
-//            printf("%d\n", update);
-//            printPhilosofers();
-//            printForks();
-//            printf("\n");
-
-            for(i = 0; i < N_PHILOSOFERS; ++i)
-            {
-                if (philStatus[i] == THINKING)
-                {
-                    attron(COLOR_PAIR(C_THINKING));
-                    mvprintw(philCoords[i].status.y, philCoords[i].status.x, "thinking");
-                    attroff(COLOR_PAIR(C_THINKING));
-                }
-                else
-                {
-                    attron(COLOR_PAIR(C_EATING));
-                    mvprintw(philCoords[i].status.y, philCoords[i].status.x, "eating  ");
-                    attroff(COLOR_PAIR(C_EATING));
-                }
-                
-                gettimeofday(&currentTime, NULL);
-                
-                if(forks[i] == -1)
-                {
-                    attron(COLOR_PAIR(C_FORK_TABLE));
-                    mvprintw(forkCoords[i].y, forkCoords[i].x, "f%2d", i);
-                    mvprintw(forkCoords[i].y+1, forkCoords[i].x, "  ", i);
-                    attroff(COLOR_PAIR(C_FORK_TABLE));
-                }
-                else
-                {
-                    attron(COLOR_PAIR(C_FORK_NOT_TABLE));
-                    mvprintw(forkCoords[i].y, forkCoords[i].x, "f%2d", i);
-                    attroff(COLOR_PAIR(C_FORK_NOT_TABLE));
-                    mvprintw(forkCoords[i].y+1, forkCoords[i].x, "p%2d", forks[i]);
-                }
-            }
-    
-            refresh();			/* Print it on to the real screen */
-            update = -1;
+            forks[myRightForkID] = TABLE;
+            forks[myLeftForkID] = TABLE;
+            pthread_exit(0);
         }
-        if(imout == N_PHILOSOFERS)
+        
+        //DROPPING LEFT FORK
+        forks[myLeftForkID] = TABLE;
+        
+        sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        
+        if(!internalKeepRunning)
         {
-            break;
+            forks[myRightForkID] = TABLE;
+            pthread_exit(0);
         }
+        
+        //DROPPING RIGHT FORK
+        forks[myRightForkID] = TABLE;
+        
+        sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
+        internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
+        
+        if(!internalKeepRunning) pthread_exit(0);
+        
+        //THINKING FOR 3 SECONDS
+        usleep(300000);
     }
-    
-    getch();
-    
-    endwin();			/* End curses mode		  */
 }
 
 int main()
 {
     int i;
-    pthread_mutex_init(&mtx_timeLog, NULL);
     
-    pthread_t thread_id[N_PHILOSOFERS];
-    pthread_t thread_updater;
+    signal(SIGINT, intHandler);
+    
+    srand(time(NULL));
     
     for (i = 0; i < N_PHILOSOFERS; i++) {
-        forks[i] = -1;
+        forks[i] = TABLE;
         phil[i] = i;
+        pthread_mutex_init(&(forkMtx[i]),NULL);
     }
     
-    pthread_create(&thread_updater, NULL,
-                   printUpdate, NULL);
+    usleep(1000000);
     
-    //for (i = N_PHILOSOFERS - 1; i >= 0; --i) {
+    printf("launching threads\n");
+    
     for (i = 0; i < N_PHILOSOFERS; ++i)
     {
         // create philosopher processes
         pthread_create(&thread_id[i], NULL,
-                philospher, &phil[i]);
+                       philosopher, &phil[i]);
     }
     
-    update = 0;
+    printf("threads launched!\n");
     
-    for (i = 0; i < N_PHILOSOFERS; i++)
+    for (i = 0; i < N_PHILOSOFERS; ++i)
     {
         pthread_join(thread_id[i], NULL);
-    
-        //mvprintw(8, 0, "");
-        //printf("philosofer %2d stopped\n", i);
-    
+        
     }
     
-    pthread_join(thread_updater, NULL);
+    printf("all thread joined.\n");
     
-    pthread_mutex_destroy(&mtx_timeLog);
+    char fileName[20];
     
-    printf("starvation!\n");
+    FILE *f;
+    
+    for (int p = 0; p < N_PHILOSOFERS; ++p)
+    {
+        sprintf(fileName, "logPhil%d.txt", p);
+        
+        printf("creating file %s\n", fileName);
+        
+        f = fopen(fileName, "wb");
+        
+        for (i = 0; i < N_TIMELOG; ++i)
+        {
+            fputs(eventLog[p][i],f);
+            fwrite("\n", sizeof(char), 1, f);
+        }
+        
+        fclose(f);
+        printf("file %s created\n", fileName);
+        
+    }
 }
