@@ -21,6 +21,8 @@
 
 #define N_TIMELOG 10000
 #define MAX_WHAT_LENGTH 100
+#define TIME_THINKING_TO_DEATH 8000000
+#define EATING_TIME 2000000
 
 int state[N_PHILOSOFERS];
 int phil[N_PHILOSOFERS];
@@ -79,14 +81,14 @@ void* philosopher(void* philosopherID)
     int eventLogIndex = 0;
     int internalKeepRunning = 1;
     
-    gettimeofday(&(thikingStart[myPhilosoferID]), NULL);
-    
     sprintf(what, "p%d thinking", myPhilosoferID);
     internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
     if(!internalKeepRunning) pthread_exit(0);
     
-    while (keepRunning && internalKeepRunning) {
+    gettimeofday(&(thikingStart[myPhilosoferID]), NULL);
     
+    while (keepRunning && internalKeepRunning) {
+        
         sprintf(what, "p%d try L f%d", myPhilosoferID, myLeftForkID);
         internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
         if(!internalKeepRunning) pthread_exit(0);
@@ -94,9 +96,10 @@ void* philosopher(void* philosopherID)
         do
         {
             gettimeofday(&currentTime, NULL);
-            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > 3000000)
+            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > TIME_THINKING_TO_DEATH)
             {
-                sprintf(what, "p%d dead", myPhilosoferID);
+                printf("p%d though for %ld us\n", myPhilosoferID, 1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec);
+                sprintf(what, "p%d dead * *", myPhilosoferID);
                 internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
                 keepRunning = 0;
                 pthread_exit(0);
@@ -125,8 +128,9 @@ void* philosopher(void* philosopherID)
         do
         {
             gettimeofday(&currentTime, NULL);
-            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > 3000000)
+            if(1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec > TIME_THINKING_TO_DEATH)
             {
+                printf("p%d though for %ld us\n", myPhilosoferID, 1000000*(currentTime.tv_sec - thikingStart[myPhilosoferID].tv_sec)+currentTime.tv_usec-thikingStart[myPhilosoferID].tv_usec);
                 sprintf(what, "p%d dead", myPhilosoferID);
                 internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
                 keepRunning = 0;
@@ -162,7 +166,7 @@ void* philosopher(void* philosopherID)
             pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
             pthread_exit(0);
         }
-        usleep(2000000);
+        usleep(EATING_TIME);
     
     
         philStatus[myPhilosoferID] = THINKING;
@@ -177,11 +181,13 @@ void* philosopher(void* philosopherID)
             pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
             pthread_exit(0);
         }
-
+    
+        gettimeofday(&(thikingStart[myPhilosoferID]), NULL);
+    
+        sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
         forks[myLeftForkID] = TABLE;
         pthread_mutex_unlock(&(forkMtx[myLeftForkID]));
         
-        sprintf(what, "p%d drop L f%d", myPhilosoferID, myLeftForkID);
         internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
 //        update = myPhilosoferID;
         if(!internalKeepRunning)
@@ -190,11 +196,11 @@ void* philosopher(void* philosopherID)
             pthread_mutex_unlock(&(forkMtx[myRightForkID]));
             pthread_exit(0);
         }
-
+    
+        sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
         forks[myRightForkID] = TABLE;
         pthread_mutex_unlock(&(forkMtx[myRightForkID]));
         
-        sprintf(what, "p%d drop R f%d", myPhilosoferID, myRightForkID);
         internalKeepRunning = !saveToLog(&eventLogIndex, what, &currentTime, myPhilosoferID);
 //        update = myPhilosoferID;
         if(!internalKeepRunning) pthread_exit(0);
