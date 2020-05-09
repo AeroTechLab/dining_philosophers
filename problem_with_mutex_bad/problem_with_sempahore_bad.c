@@ -84,7 +84,7 @@ void put_fork(int phnum)
 }
 
 noreturn
-void* philospher(void* num)
+void* philosopher(void* num)
 {
     
     while (1) {
@@ -120,7 +120,7 @@ int main()
         
         // create philosopher processes 
         pthread_create(&thread_id[i], NULL,
-                       philospher, &phil[i]);
+                       philosopher, &phil[i]);
         
         printf("Philosopher %d is thinking\n", i + 1);
     }
