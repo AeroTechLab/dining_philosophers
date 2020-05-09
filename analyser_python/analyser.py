@@ -221,7 +221,7 @@ for time, event, fo in zip(final_times, final_events, forks_owners):
         final_log_text[-1] = final_log_text[-1] + '{:>6}'.format('' if o == [] else o)
 
 # writing to file for real
-with open('final_log_novo.txt','w') as f_final_logs:
+with open('final_log.txt','w') as f_final_logs:
     # header first
     f_final_logs.write(final_log_text[0] + '\n')
 
