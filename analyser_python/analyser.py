@@ -30,20 +30,20 @@ for event in range(n_philosofers):
     logs_times.append([])
     for l_idx in range(n_lines):
         logs_event[event].append('')
-        logs_times[event].append('')
+        logs_times[event].append(0)
 
 # pre allocating for log (text) and log_times (duh)
-final_event = []     # this is a timeline: stores in each element the event of each of the final_log.txt
+final_events = []     # this is a timeline: stores in each element the event of each of the final_log.txt
 final_times = []    # this is a timeline: stores in each element the time of each of the final_log.txt
-forks_owner = []    # this is a timeline: stores in each element the list of the owners of each fork
+forks_owners = []    # this is a timeline: stores in each element the list of the owners of each fork
 
 for event in range(n_lines * n_philosofers):
-    final_event.append([])
+    final_events.append([])
     final_times.append([])
-    forks_owner.append([])
+    forks_owners.append([])
     for l_idx in range(n_philosofers):
-        final_event[event].append('') # preallocated with empty string
-        forks_owner[event].append([])
+        final_events[event].append('') # preallocated with empty string
+        forks_owners[event].append([])
 
 time_regexp = re.compile('\d+')     # regexp to find at start of each line of logPhil\d+.txt
 phil_regexp = re.compile('p\d+')    # regexp to find philosofer
@@ -90,18 +90,23 @@ time_zero = 0
 # mark if is first iteration or not (to get the time_zero of the logs)
 first_iteration = True
 
+last_time = []
+last_events = []
+last_fowners = []
+last_phil_idx = []
+
 # while there is at least one logPhil alive
 while any(live_phil_logs_idx) == True:
     # emptying current stuff
     current_lines = []
     current_times = []
-
+    current_final_line = np.sum(line_indexes)
     # for each philosofer
     for phil_idx in range(len(live_phil_logs_idx)):
         if live_phil_logs_idx[phil_idx]:                                        # if this philosofer's log is alive
             current_lines.append(logs_event[phil_idx][line_indexes[phil_idx]])  # get its event
             current_times.append(logs_times[phil_idx][line_indexes[phil_idx]])  # get its event's time
-    else:                                                                       # if not alive
+        else:                                                                       # if not alive
             current_lines.append('')                                            # get nothing
             current_times.append(np.inf)                                        # get infinite time (low time is important here)
 
@@ -125,8 +130,10 @@ while any(live_phil_logs_idx) == True:
         # gets its id
         current_fork_idx = int(fork_regexp.search(current_lines[current_phil_idx]).groups()[0])
         # gets its owner
-        current_forks_owners[current_fork_idx] = 'p' + str(current_phil_idx)
-    else: # if no gotten fork
+        current_forks_owners[current_fork_idx] = '+p' + str(current_phil_idx)
+
+        result_drop = None
+    else:
         # searching for a dropped fork
         result_drop = drop_regexp.search(current_lines[current_phil_idx])
         # if a fork was dropped
@@ -136,16 +143,47 @@ while any(live_phil_logs_idx) == True:
             # gets its dropper owner (marked with a minus sign)
             current_forks_owners[current_fork_idx] = '-p' + str(current_phil_idx)
 
+
     # writing down current fork owners
-    forks_owner[np.sum(line_indexes)] = current_forks_owners[:]
+    forks_owners[current_final_line] = current_forks_owners[:]
+
+    # write down to final_logs and final_times
+    final_events[current_final_line][current_phil_idx] = current_lines[current_phil_idx]
+    final_times[current_final_line] = int(current_times[current_phil_idx])
+
+    # sometimes drops and gots are in inverted positions. this corrects it
+    # if this is a drop AND
+    # if last was a got AND
+    # if same fork as before AND
+    # if not first iteration AND
+    # if same time as before
+    if result_drop \
+        and last_result_got_fork \
+        and last_fork_idx == current_fork_idx \
+        and not first_iteration \
+        and final_times[current_final_line] == last_time:
+            aux = (final_times[current_final_line], final_events[current_final_line][:], forks_owners[current_final_line][:])
+            final_times[current_final_line], final_events[current_final_line], forks_owners[current_final_line] = last_time, last_events[:], last_fowners[:]
+            final_times[current_final_line-1], final_events[current_final_line-1], forks_owners[current_final_line-1] = aux
+            current_forks_owners = forks_owners[current_final_line][:]
+            result_drop = None
 
     # after this, erase the dropped fork owners
     if result_drop:
         current_forks_owners[current_fork_idx] = ''
 
-    # write down to final_logs and final_times
-    final_event[np.sum(line_indexes)][current_phil_idx] = current_lines[current_phil_idx]
-    final_times[np.sum(line_indexes)] = int(current_times[current_phil_idx])
+    if result_got:
+        current_forks_owners[current_fork_idx] = current_forks_owners[current_fork_idx][1:]
+
+    # storing interesting things from
+    # this iteration (future's last iteration) for
+    # the next (future's current iteration)
+    last_time = final_times[current_final_line]
+    last_events = final_events[current_final_line][:]
+    last_fowners = forks_owners[current_final_line][:]
+    last_phil_idx = current_phil_idx
+    last_result_got_fork = result_got
+    last_fork_idx = current_fork_idx
 
     # increment consumed line of the current philosofer's log
     line_indexes[current_phil_idx] = line_indexes[current_phil_idx] + 1
@@ -164,12 +202,12 @@ header = ' '*20 + ' '*15* n_philosofers + '|' + ''.join(['{:>6}'.format('f'+str(
 final_log_text = []
 
 # writes header to it
-final_log_text.append(header + '\n')
+final_log_text.append(header)
 
 # walking by time, event and forks' owners
-for time, event, fo in zip(final_times, final_event, forks_owner):
+for time, event, fo in zip(final_times, final_events, forks_owners):
     # writing time in the begining
-    final_log_text.append('{:20}'.format(str(time)))
+    final_log_text.append('{:>20}'.format(str(time)))
 
     # writing event of this time
     for e in event:
@@ -183,7 +221,7 @@ for time, event, fo in zip(final_times, final_event, forks_owner):
         final_log_text[-1] = final_log_text[-1] + '{:>6}'.format('' if o == [] else o)
 
 # writing to file for real
-with open('final_log.txt','w') as f_final_logs:
+with open('final_log_novo.txt','w') as f_final_logs:
     # header first
     f_final_logs.write(final_log_text[0] + '\n')
 
