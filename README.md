@@ -13,7 +13,7 @@ Both of the above implementations may be compiled using CMake or the following:
 
 ```
 gcc problem_with_mutex.c -o problem_with_mutex -lpthread
-gcc problem_with_mutex.c -o problem_with_mutex -lpthread
+gcc problem_without_mutex.c -o problem_without_mutex -lpthread
 ```
 
 To compile with debug symbols, just append `-g` to the compilation command
