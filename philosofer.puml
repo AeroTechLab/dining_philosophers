@@ -1,7 +1,7 @@
 @startuml
 scale 550 width
 
-state Philosofer1 {
+state Philosofer {
   [*] --> Thinking
   Thinking --> Thinking : Grabs 1st fork
   Thinking ----> Eating : Grabs 2nd fork
