@@ -1,9 +1,9 @@
-# Dining Philosofers Problem
+# Dining Philosophers Problem
 
 ### Embbeded Systems SEM-0544
 ##### Brazil, São Carlos, EESC - USP
 
-A repository with some implementations of the Dining Philosofers Problem
+A repository with some implementations of the Dining Philosophers Problem
 
 ### `problem_with_mutex` and `problem_without_mutex`
 
